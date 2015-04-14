@@ -1,0 +1,17 @@
+source 'https://rubygems.org'
+source 'https://DqdrGPsmCE8TAis6Anr3@gem.fury.io/demeure/'
+
+def lgem(*args)
+  dev_home = ENV['DEV_HOME']
+  gem_name = args[0]
+  if File.directory? "#{dev_home}/#{gem_name}"
+    gem gem_name, path: "#{dev_home}/#{gem_name}"
+  else
+    gem(*args) if args[1]
+  end
+end
+
+ruby '2.1.0'
+
+# Specify your gem's dependencies in zap.gemspec
+gemspec

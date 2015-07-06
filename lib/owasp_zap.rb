@@ -13,6 +13,7 @@ require_relative "owasp_zap/alert"
 require_relative "owasp_zap/auth"
 require_relative "owasp_zap/scanner"
 require_relative "owasp_zap/policy"
+require_relative "owasp_zap/os"
 
 module OwaspZap
     class ZapException < Exception;end
@@ -32,11 +33,11 @@ module OwaspZap
         def status_for(component)
             case component
             when :ascan
-                Zap::Attack.new(:base=>@base,:target=>@target).status
+              OwaspZap::Attack.new(:base=>@base,:target=>@target).status
             when :spider
-                Zap::Spider.new(:base=>@base,:target=>@target).status
+              OwaspZap::Spider.new(:base=>@base,:target=>@target).status
             when :scan
-                Zap::Scan.new(:base=>@base,:target=>@target).status
+              OwaspZap::Scan.new(:base=>@base,:target=>@target).status
             else
                 {:status=>"unknown component"}.to_json
             end
@@ -56,28 +57,28 @@ module OwaspZap
         end
 
         def policy
-            Zap::Policy.new(:base=>@base)
+          OwaspZap::Policy.new(:base=>@base)
         end
 
         def alerts
-            Zap::Alert.new(:base=>@base,:target=>@target)
+          OwaspZap::Alert.new(:base=>@base,:target=>@target)
         end
         
         def scanner
-            Zap::Scanner.new(:base=>@base)
+          OwaspZap::Scanner.new(:base=>@base)
         end
 
         #attack
         def ascan
-            Zap::Attack.new(:base=>@base,:target=>@target)
+          OwaspZap::Attack.new(:base=>@base,:target=>@target)
         end
 
         def spider
-            Zap::Spider.new(:base=>@base,:target=>@target)
+          OwaspZap::Spider.new(:base=>@base,:target=>@target)
         end
 
         def auth
-            Zap::Auth.new(:base=>@base) 
+          OwaspZap::Auth.new(:base=>@base)
         end
 
         # TODO
@@ -88,16 +89,41 @@ module OwaspZap
             else
                 @zap_bin
             end
-            fork do
-               # if you passed :output=>"file.txt" to the constructor, then it will send the forked process output
-               # to this file (that means, ZAP stdout)
-               unless @output == $stdout
-                STDOUT.reopen(File.open(@output, 'w+'))
-                STDOUT.sync = true 
-               end
-               exec cmd_line
+            if (OS.java?)
+              start_zap_thread(cmd_line)
+            else
+              fork_zap_process(cmd_line)
             end
         end
+
+       def fork_zap_process(cmd_line)
+         fork do
+           set_output
+           exec cmd_line
+         end
+       end
+
+       def start_zap_thread(cmd_line)
+         @java_thread = Thread.new do
+           set_output
+           system(cmd_line)
+         end
+         start_up = 0
+         until running? do
+           sleep 1
+           start_up += 1
+           puts "Failed to start ZAP!" if (start_up == 30)
+         end
+       end
+
+       def set_output
+         # if you passed :output=>"file.txt" to the constructor, then it will send the forked process output
+         # to this file (that means, ZAP stdout)
+         unless @output == $stdout
+           STDOUT.reopen(File.open(@output, 'w+'))
+           STDOUT.sync = true
+         end
+       end
 
         #shutdown zap
         def shutdown
@@ -108,6 +134,11 @@ module OwaspZap
         #maybe it should be refactored to alert. 
         def xml_report
             RestClient::get "#{@base}/OTHER/core/other/xmlreport/"
+        end
+
+        #html report
+        def html_report
+          RestClient::get "#{@base}/OTHER/core/other/htmlreport/?"
         end
    end
 end
